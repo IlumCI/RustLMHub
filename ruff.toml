@@ -1,0 +1,47 @@
+# Lint configuration for the Python tooling under tools/.
+#
+# These scripts generate the test fixtures and the reference implementation the C engine
+# is graded against, so a defect here is a defect in the pass criteria, silently, and in
+# the direction of passing. That is what this configuration is selected to catch.
+#
+# It deliberately does NOT enforce style modernization. The rule set below is chosen so
+# that every reported finding is a real problem, because a gate that reports 200 findings
+# nobody intends to fix is a gate people learn to ignore.
+
+line-length = 100
+target-version = "py39"
+
+[lint]
+select = [
+    "F",      # pyflakes: undefined names, unused imports, unused variables, f-string bugs
+    "E4",     # import placement
+    "E7",     # comparison and statement errors (== None, bare semicolons, lambda assignment)
+    "E9",     # syntax and IO errors
+    "B",      # bugbear: mutable default args, loop-variable capture, assert-on-tuple
+    "A",      # builtin shadowing, `id`, `type` and `list` are easy to shadow accidentally
+    "RUF",    # ruff-specific correctness checks
+]
+
+ignore = [
+    # %-formatting is used throughout for printf-style diagnostic output, where the format
+    # string reads as one unit alongside the C code printing the same thing. Converting to
+    # f-strings would be churn with no defect fixed.
+    "UP031", "UP032",
+    # Assert is used in the fixture generators as a precondition on generated data. That is
+    # the intended meaning: if the assertion fails the fixture is wrong and must not ship.
+    "B011",
+    # Ambiguous unicode is intentional in the tokenizer parity cases, which exist precisely
+    # to exercise homoglyphs, ZWJ sequences and combining marks.
+    "RUF001", "RUF002", "RUF003",
+    # Compact `a = x; b = y` for parallel assignments of the same kind, used consistently
+    # where splitting the pair across lines obscures that they belong together.
+    "E702",
+    # `list + [x]` rather than `[*list, x]`. Both are correct; neither is a defect.
+    "RUF005",
+]
+
+[lint.per-file-ignores]
+# The reference implementation mirrors modeling_kimi_linear.py statement for statement,
+# including its single-letter tensor names. Renaming them for style would break the
+# line-by-line correspondence that makes the reference auditable against the released code.
+"k3_ref.py" = ["E741"]
