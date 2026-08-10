@@ -1,0 +1,37 @@
+name: Bug report
+description: Something behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Wrong *output* is the most important class of bug here, the engine can produce
+        fluent text from a wrong model. If tokens look off, say so even without a crash.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the exact command line.
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations: {required: true}
+  - type: input
+    id: cpu
+    attributes:
+      label: CPU
+      placeholder: "e.g. AMD EPYC 7763, 64 cores, AVX2 (no AVX-512)"
+    validations: {required: true}
+  - type: input
+    id: mem
+    attributes:
+      label: RAM and storage
+      placeholder: "e.g. 64 GB, NVMe measured at 3.2 GB/s"
+  - type: textarea
+    id: gates
+    attributes:
+      label: Output of `make test`
+      render: shell
+    validations: {required: true}
