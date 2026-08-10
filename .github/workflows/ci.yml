@@ -1,0 +1,308 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref, a push to a busy PR should not queue builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Every test in this job runs WITHOUT model weights. That is deliberate: the checkpoint
+  # is 1.56 TB, so correctness has to be verifiable without it or it will not be verified.
+  build-and-test:
+    name: build + test (${{ matrix.os }}, ${{ matrix.cc }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04]
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+          ${{ matrix.cc }} --version
+
+      # -march=native is wrong for CI: the runner's CPU is not the user's. ARCH pins the
+      # documented baseline (AVX2 + FMA) instead. It is passed to `test`, not only to
+      # `all`, because the test binaries are built from the same objects and a mixed
+      # -march=native/-mavx2 tree is neither of the two configurations we ship.
+      - name: Build (portable baseline)
+        run: make CC=${{ matrix.cc }} ARCH="-mavx2 -mfma" -j"$(nproc)"
+
+      # `make test` and not the individual binaries. This is the command the README's
+      # Quick start tells every user to run, so it is the one that has to be green. The
+      # per-binary list this replaced omitted scale_test entirely -- the only gate with a
+      # real memory cost, and the only one that exercises the real 7168-wide dimensions.
+      - name: make test
+        run: make CC=${{ matrix.cc }} ARCH="-mavx2 -mfma" test -j"$(nproc)"
+
+      # The tokenizer leg above reports NOT RUN without a vocabulary, which is correct but
+      # must not be mistaken for coverage. Assert the rest of the suite really ran.
+      - name: Assert the suite was not silently empty
+        run: |
+          make CC=${{ matrix.cc }} ARCH="-mavx2 -mfma" test 2>&1 | tee /tmp/t.log
+          grep -q "22 passed, 0 failed, 0 skipped" /tmp/t.log
+          grep -q "SCALE TEST PASSED"              /tmp/t.log
+          grep -q "VERDICT: ENGINE MATCHES THE REFERENCE EXACTLY" /tmp/t.log
+          grep -q "ALL WEIGHTLESS TESTS PASSED"    /tmp/t.log
+
+  # A separate job rather than a matrix leg: the toolchain step is brew rather than apt,
+  # nproc does not exist on macOS, and Apple Clang ships no OpenMP runtime, so the flags
+  # the Makefile has to discover are exactly the ones this job exists to check.
+  build-and-test-macos:
+    name: build + test (macos-14, apple clang)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install toolchain
+        run: |
+          brew install libomp
+          cc --version
+          echo "libomp prefix: $(brew --prefix libomp)"
+
+      # Deliberately no arguments. The defect this job guards against is `make` failing
+      # on a Mac, so it must exercise the platform-detection path, not bypass it.
+      - name: Build (default flags, platform detection)
+        run: make -j"$(getconf _NPROCESSORS_ONLN)"
+
+      # The other arm64 branch: `portable` must drop tuning rather than pass x86 flags.
+      - name: Build (portable baseline)
+        run: |
+          make clean
+          make portable -j"$(getconf _NPROCESSORS_ONLN)"
+
+      # `make test`, for the same reason as the Linux job. A hand-written binary list here
+      # would omit scale_test, and scale_test is the ONLY file in this port whose change
+      # is a Darwin-only compile fix: snprintf sits behind __DARWIN_C_LEVEL >= 200112L, so
+      # its _POSIX_C_SOURCE bump is load-bearing on macOS and inert on Linux. Building the
+      # six binaries by name would leave that hunk revertible with the job still green.
+      - name: make test
+        run: make test -j"$(getconf _NPROCESSORS_ONLN)"
+
+      - name: Assert the suite was not silently empty
+        run: |
+          make test 2>&1 | tee "$RUNNER_TEMP/t.log"
+          grep -q "22 passed, 0 failed, 0 skipped" "$RUNNER_TEMP/t.log"
+          grep -q "SCALE TEST PASSED"              "$RUNNER_TEMP/t.log"
+          grep -q "VERDICT: ENGINE MATCHES THE REFERENCE EXACTLY" "$RUNNER_TEMP/t.log"
+          grep -q "ALL WEIGHTLESS TESTS PASSED"    "$RUNNER_TEMP/t.log"
+
+  # The port in rust/ is where new work goes (README.md:26), and until now no job in this
+  # file mentioned cargo -- the active development surface was entirely ungated. The
+  # load-bearing step is rust-diff: it builds BOTH engines and requires byte-identical
+  # output, which is the contract docs/RUST_PORT.md:37 rests on. Give that up and every
+  # performance comparison in docs/ becomes unfalsifiable.
+  rust:
+    name: rust port
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # libomp is for the C half of rust-diff, not for the port. Note the asymmetry with
+      # the C jobs: that build needs -ffp-contract=off (Makefile:86) to stop the compiler
+      # folding a*b+c into a fused instruction with different rounding, and Rust needs no
+      # equivalent because it never contracts implicitly. Nor does it need ARCH pinned for
+      # its own kernels -- ops.rs dispatches on is_x86_feature_detected! at runtime.
+      - name: Install toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libomp-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: make rust
+        run: make rust
+
+      # Runs the whole suite, which already includes the 14 K3 op fixtures (`make
+      # rust-ops` is the same tests filtered, so running it too would only duplicate
+      # them). The fixtures under tests/fixtures/ are shared with the C suite, not
+      # duplicated -- a Rust harness reads the same files.
+      - name: make rust-test
+        run: make rust-test
+
+      # Deliberately clippy and NOT `cargo fmt --check`. The kernels keep a denser layout
+      # than rustfmt's default so they stay diffable line-for-line against
+      # src/core/k3_ops.c, which is the property that makes "port this file, gate it, move
+      # on" work at all. Two lints are refused crate-wide in src/lib.rs for the same
+      # reason; everything else is a defect.
+      - name: clippy
+        run: cd rust && cargo clippy --release --all-targets -- -D warnings
+
+      # docs/RUST_PORT.md:79 says this gate is cheap (~16 s) and belongs in CI. It sweeps
+      # every one of the 4,278,190,082 non-NaN f32 bit patterns against the C symbols the
+      # engine links. The argument that Rust's f32::exp lowers to the same glibc expf is
+      # structural rather than lucky -- but it stops holding the moment someone retargets
+      # to musl or aarch64, which is exactly when a silent last-ulp drift would be hardest
+      # to find. Inside a 93-layer stack of softmaxes it does not stay a last-ulp drift.
+      - name: make rust-parity
+        run: make rust-parity
+
+      # ARCH is pinned for the same reason the C jobs pin it: -march=native is wrong in
+      # CI because the runner's CPU is not the user's.
+      - name: make rust-diff
+        run: make ARCH="-mavx2 -mfma" rust-diff
+
+      # rust-diff exits 1 on a mismatch, so this is not about the exit code. It is about
+      # the one degradation the exit code cannot catch: two readers that both emit nothing
+      # compare equal. Assert the comparisons named a result.
+      # Step 8 of the ladder: the whole stack, not one module. Needs torch to build the
+      # tiny checkpoint, and reports NOT RUN rather than passing quietly without it.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu && pip install --quiet safetensors numpy
+      - name: make rust-golden
+        run: |
+          make ARCH="-mavx2 -mfma" rust-golden 2>&1 | tee /tmp/golden.log
+          grep -q "FAIL" /tmp/golden.log && exit 1
+          grep -q "logits byte-identical" /tmp/golden.log
+          grep -q "incremental decode agrees" /tmp/golden.log
+
+      - name: Assert the differential gate was not silently empty
+        run: |
+          make ARCH="-mavx2 -mfma" rust-diff 2>&1 | tee /tmp/rustdiff.log
+          grep -q "ok    index and widened values byte-identical" /tmp/rustdiff.log
+          grep -q "ok    byte-identical output"                   /tmp/rustdiff.log
+          for f in no_layermap bad_layer_index bad_topk; do
+            grep -q "ok    $f rejected by both" /tmp/rustdiff.log
+          done
+
+  # rust/Cargo.toml declares rust-version = "1.85". Nothing checked it, so the floor was
+  # a claim rather than a gate. Build only: the toolchain floor is about whether the crate
+  # compiles, and clippy's lint set moves between releases.
+  rust-msrv:
+    name: rust MSRV (1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          key: msrv
+      - run: cd rust && cargo build --release --all-targets
+
+  # Warnings are defects here. The engine does arithmetic on `const void *` weight
+  # pointers, where a missing -Wpointer-arith silently strides by one byte.
+  strict-warnings:
+    name: warnings as errors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libomp-dev
+      - name: Build with -Werror
+        run: make portable CFLAGS="-O2 -std=gnu99 -Wall -Wextra -Wpointer-arith -Wshadow -Wvla -Wno-unused-parameter -Werror -fopenmp -ffp-contract=off" -j"$(nproc)"
+
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libomp-dev
+      # test_cache and test_st are the two that matter most here. SECURITY.md puts the
+      # safetensors parser and the streaming cache in scope precisely because they read
+      # attacker-influenceable bytes: a hand-written binary parser and an O_DIRECT slot
+      # allocator are where an out-of-bounds read actually lives.
+      - name: Build instrumented tests
+        run: |
+          make CFLAGS="-O1 -g -std=gnu99 -Wall -Wextra -fsanitize=address,undefined -fno-omit-frame-pointer" \
+               LDFLAGS="-lm -fsanitize=address,undefined" ARCH= \
+               bin/test_ops bin/test_cfg bin/test_cache bin/test_st bin/k3_model \
+               -j"$(nproc)"
+      - name: Run under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          ./bin/test_ops tests/fixtures/ops
+          ./bin/test_cfg fixture tests/fixtures/ref_k3.json
+          for f in no_layermap bad_layer_index bad_topk; do
+            ./bin/test_cfg reject "tests/fixtures/cfg/$f.json"
+          done
+          ./bin/test_cache tests/fixtures/cache
+          ./bin/test_st tests/fixtures/st "$RUNNER_TEMP/idx.json" \
+            plain.f32.2d plain.bf16.1d tricky.f16.1d packed.u8.2d scalar.f32 second.shard.f32
+          ./bin/k3_model tests/fixtures
+
+  # The tokenizer is portable C99 and must agree with the reference implementation
+  # token-for-token. A tokenizer that is merely "close" corrupts every prompt silently.
+  tokenizer-parity:
+    name: tokenizer parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet tiktoken
+
+      # This job compiles the tokenizer and, when the vocabulary is available, checks it
+      # against the reference implementation.
+      #
+      # It CANNOT gate on a clean checkout. Both the parity check and the byte-exact
+      # roundtrip need tiktoken.model, which ships with the model weights and is not in
+      # this repository, 163,584 vocabulary entries are not something to vendor. So the
+      # job reports NOT RUN rather than passing quietly: a check that silently degrades
+      # to nothing is worse than no check at all, because the green tick still gets
+      # believed. See docs/TESTING.md, which lists this as the one gate CI cannot run.
+      - run: make bin/test_tok
+      - name: Parity vs reference tokenizer
+        env:
+          K3_TOK_FILES: ${{ github.workspace }}/tests/fixtures/tokenizer
+        run: |
+          if [ -f "$K3_TOK_FILES/tiktoken.model" ]; then
+            ./bin/test_tok "$K3_TOK_FILES" roundtrip README.md
+            python tools/tok_parity.py ./bin/test_tok
+          else
+            echo "::warning title=Tokenizer parity NOT RUN::tiktoken.model is absent" \
+                 "(it ships with the model weights, not with this repository), so" \
+                 "neither parity nor the byte-exact roundtrip was checked. Run" \
+                 "'make tok' locally against a downloaded checkpoint."
+          fi
+
+  python-lint:
+    name: python tools lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet ruff
+      # Gates. Style drift in tools that generate the test fixtures is worth catching,
+      # and an unparseable tool is a broken fixture pipeline.
+      - run: ruff check tools/ --output-format=github
+      - name: Syntax check every tool
+        run: python -m compileall -q tools/
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends shellcheck
+      # benchmarks/ is included deliberately. Its scripts run unattended for hours and
+      # record whatever they observe as a result, so a quoting or pipefail defect there
+      # does not crash, it produces a plausible-looking table of wrong numbers.
+      - run: find scripts examples benchmarks -name '*.sh' -print0 | xargs -0 -r shellcheck -S warning
