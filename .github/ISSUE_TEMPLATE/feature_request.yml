@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can't you do today
+    validations: {required: true}
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+  - type: checkboxes
+    id: roadmap
+    attributes:
+      label: Checked the roadmap
+      options:
+        - label: I read docs/ROADMAP.md and this is not already listed
