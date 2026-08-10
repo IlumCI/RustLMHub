@@ -1,0 +1,83 @@
+=== int8 vs int4 sensitivity on REAL Kimi K3 weights ===
+captured: 2026-07-30T17:04:50Z
+method  : 31 attention-projection tensors sampled from the released checkpoint by
+          HTTP range read - real weights, no full download. 384 rows per tensor.
+          Each tensor is round-tripped through int8 and int4 with one fp32 scale per
+          32 elements, and the mean relative reconstruction error is recorded.
+
+WHY THIS EXISTS
+  This is the measurement behind the engine's central design decision: the resident
+  trunk is STREAMED VERBATIM rather than quantised.
+
+  Quantising the trunk is the obvious way to fit a 113 GB resident set into less RAM,
+  and it is the wrong one. K3's technical report section 4.1.4 states that the experts
+  are MXFP4 with quantisation-aware training "while all non-expert components remain
+  in higher precision" - that list IS the trunk, so it was never trained to tolerate
+  4-bit. This study checks whether that holds on the actual weights.
+
+  It does. So the engine quantises NOTHING: routed experts are already MXFP4 in the
+  checkpoint and are multiplied in that form, and the trunk is copied byte for byte.
+  Streaming costs zero reconstruction error, which is why memory could be made a dial
+  without any accuracy claim attached to it.
+
+  type   tensor                      int8 mean  int4 mean    ratio
+  ------------------------------------------------------------------
+  ?      L1.v_proj                     0.00926    0.16811    18.1x
+  ?      L1.g_proj                     0.00895    0.16233    18.1x
+  ?      L5.v_proj                     0.00916    0.16614    18.1x
+  ?      L5.o_proj                     0.01029    0.18670    18.1x
+  ?      L9.k_proj                     0.00914    0.16568    18.1x
+  ?      L9.g_proj                     0.00898    0.16286    18.1x
+  ?      L9.o_proj                     0.01020    0.18512    18.1x
+  ?      L3.o_proj                     0.01090    0.19774    18.1x
+  ?      L3.g_proj                     0.01092    0.19801    18.1x
+  ?      L7.kv_b_proj                  0.00741    0.13427    18.1x
+  ?      L7.o_proj                     0.01099    0.19919    18.1x
+  KDA    L13.g_proj                    0.00903    0.16370    18.1x
+  KDA    L13.o_proj                    0.01188    0.21122    17.8x
+  MLA    L3.q_a_proj                   0.00928    0.16822    18.1x
+  MLA    L3.q_b_proj                   0.00936    0.16984    18.1x
+  MLA    L3.kv_a_proj_with_mqa         0.00940    0.17041    18.1x
+  MLA    L3.kv_b_proj                  0.00736    0.13355    18.2x
+  MLA    L3.o_proj                     0.01090    0.19774    18.1x
+  MLA    L3.g_proj                     0.01092    0.19801    18.1x
+  MLA    L7.q_a_proj                   0.00910    0.16499    18.1x
+  MLA    L7.q_b_proj                   0.00837    0.15178    18.1x
+  MLA    L7.kv_a_proj_with_mqa         0.00916    0.16622    18.1x
+  MLA    L7.kv_b_proj                  0.00741    0.13427    18.1x
+  MLA    L7.o_proj                     0.01099    0.19919    18.1x
+  MLA    L7.g_proj                     0.01042    0.18906    18.1x
+  MLA    L11.q_a_proj                  0.00904    0.16383    18.1x
+  MLA    L11.q_b_proj                  0.00829    0.15035    18.1x
+  MLA    L11.kv_a_proj_with_mqa        0.00913    0.16557    18.1x
+  MLA    L11.kv_b_proj                 0.00737    0.13333    18.1x
+  MLA    L11.o_proj                    0.01399    0.24612    17.6x
+  MLA    L11.g_proj                    0.01022    0.18521    18.1x
+  ------------------------------------------------------------------
+  MEAN over KDA-layer tensors          0.01046    0.18746    17.9x  (n=2)
+  MEAN over MLA-layer tensors          0.00948    0.17154    18.1x  (n=18)
+  MEAN over ALL sampled tensors        0.00961    0.17383    18.1x  (n=31)
+
+  worst single tensor at int4: L11.o_proj  0.24612 mean rel err
+
+=== what this says ===
+int8 costs about 1% mean relative error on these weights; int4 costs about 17%.
+That ~18x gap is consistent across every tensor sampled, and it holds equally in
+KDA-layer and MLA-layer projections -- there is no layer type that tolerates int4
+noticeably better.
+
+This is why the engine does not quantise the trunk at all. Even int8 - the far better
+of the two - trades a measurable error for memory the streaming design recovers for
+free, and int4 on the trunk is not defensible at 17% mean weight error. Only the routed
+experts are 4-bit, and only because the checkpoint already ships them that way, trained
+for it.
+
+=== honest limits ===
+  - This is WEIGHT RECONSTRUCTION error, not output quality. A 17% weight error does
+    not straightforwardly become a 17% worse model, and nobody should read it that way.
+  - 384 rows sampled per tensor, not whole tensors.
+  - Attention projections only. No MoE, no embeddings, no lm_head.
+  - NO downstream logit or token comparison was run at int4, so the real quality cost
+    is unmeasured. This study bounds the WEIGHT error only. Closing that gap needs a
+    full end-to-end grid against the reference logits; tools/ref_forward.py has an
+    --int8 mode that would be the starting point.
