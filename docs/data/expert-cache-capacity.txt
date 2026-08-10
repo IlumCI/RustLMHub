@@ -1,0 +1,68 @@
+=== expert cache: hit rate vs capacity, from the recorded trace ===
+captured: 2026-07-30T16:37:15Z
+input   : tests/fixtures/expert_trace.bin (800,768 bytes, 100,096 expert requests)
+tool    : tools/sim_cache.py -- replays the real trace at any capacity
+
+WHY THIS EXISTS
+  Every measured cache number elsewhere in this campaign is confounded:
+    96.15% (a long-run log)     - a 200 GB arena that never evicts, so it measures nothing
+    39.31% (tests/fixtures/gates/gates.txt)   - still climbing after 2 tokens of quadratic re-prefill
+     0.00% (RUN A)       - 1472 requests, 1472 evictions: a cache smaller than one token
+  None of them answers the only question that matters for sizing: how much RAM does
+  the expert cache actually need? Replaying the trace does, and costs nothing.
+
+trace: 100096 requests, 10010 distinct experts, about 68 token(s)
+distinct experts touched: 10010 of 82432 (12.14% of the pool)
+if nothing were cached: 25.83 GB per token
+
+hottest experts: L4/e520 x68, L24/e136 x68, L32/e276 x67, L83/e827 x66, L81/e395 x65, L3/e515 x63
+total reuse: 90086 of 100096 requests are repeats (90.0%)
+
+CACHE        SLOTS       LRU    BELADY   PIN+LRU  GB READ/TOK     SEC/TOK
+----------------------------------------------------------------------------
+8 GB           455    36.24%    39.42%    37.82%        16.47       13.35
+16 GB          911    36.24%    42.61%    39.42%        16.47       13.35
+32 GB         1823    36.24%    48.99%    42.57%        16.47       13.35
+64 GB         3647    36.24%    61.74%    48.66%        16.47       13.35
+128 GB        7294    49.19%    84.59%    62.86%        13.12       10.64
+192 GB       10941    90.00%    90.00%    90.00%         2.58        2.09
+256 GB       14589    90.00%    90.00%    90.00%         2.58        2.09
+384 GB       21883    90.00%    90.00%    90.00%         2.58        2.09
+512 GB       29178    90.00%    90.00%    90.00%         2.58        2.09
+768 GB       43767    90.00%    90.00%    90.00%         2.58        2.09
+1024 GB      58356    90.00%    90.00%    90.00%         2.58        2.09
+1450 GB      82633    90.00%    90.00%    90.00%         2.58        2.09
+----------------------------------------------------------------------------
+SEC/TOK is expert I/O only, at the measured 1234 MB/s random-cold rate.
+It excludes compute, which overlaps with it in a real serving loop.
+BELADY and PIN+LRU both use future knowledge, so they are ceilings rather
+than achievable policies. LRU is what the engine actually does.
+compulsory misses: 10010 (every expert must be read at least once), a ceiling of
+90.00% hit rate for ANY policy at ANY size on this trace.
+
+holding every expert this trace touched needs 175.65 GB.
+holding the whole pool needs 1446.46 GB.
+
+=== what this actually says ===
+1. LRU IS FLAT FROM 8 GB TO 64 GB. 36.24% at every one of those sizes - an 8x range
+   in which more memory buys exactly nothing. The knee is between 64 and 128 GB, and
+   full benefit needs 192 GB.
+
+2. THE LEVER IS POLICY, NOT SIZE. At 64 GB, Belady reaches 61.74% where LRU manages
+   36.24%. That 25.5-point gap is available to a better replacement policy at the SAME
+   memory. Given the routed-expert set is 1.45 TB and the machine budget is tens of GB,
+   this is the more promising direction than buying RAM.
+
+3. THERE IS A HARD CEILING AT 90.00%. The trace touches 10,010 distinct experts, each
+   of which must be read at least once. No policy at any capacity beats 90% here.
+
+4. K3's ROUTER MAKES THIS HARDER BY DESIGN. The tech report (2.3.3) trains routing with
+   Quantile Balancing specifically to FLATTEN expert usage. Flat usage is what defeats
+   an LRU cache, so the weak cache behaviour is a property of the model, not a defect
+   in the engine.
+
+CAVEAT, and it matters
+   This trace was recorded during a run that re-prefills the whole prefix every step,
+   so the same experts are legitimately touched ~68 times. Steady-state incremental
+   decode has far less reuse, and its hit rates will be LOWER than this curve suggests.
+   Treat these numbers as an upper bound on what caching can do, not a forecast.
