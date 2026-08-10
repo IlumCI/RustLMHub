@@ -1,0 +1,8 @@
+# Three runs of an IDENTICAL configuration, back to back, on a quiet machine.
+# Same binary, same prompt, same flags, same minute.
+# mean 16.53 s/token, sd 3.13, spread 33.1%
+# Every speed caveat in docs/PERFORMANCE.md rests on this spread.
+run	s_per_tok	ids
+1	14.7760	17374,20829,10,427,414,1008,606,142957
+2	14.6655	17374,20829,10,427,414,1008,606,142957
+3	20.1408	17374,20829,10,427,414,1008,606,142957

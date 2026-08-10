@@ -1,0 +1,52 @@
+=== what the engine actually generated, decoded ===
+captured: 2026-07-30T16:36:22Z
+
+Token ids alone carry no quality signal, so every id below is decoded back through the
+C tokenizer. What the model produced is reproduced verbatim, including the parts that
+are not flattering.
+
+--- the full 93-layer, 2.78T-parameter checkpoint ---
+
+  prompt    ids : 1008,10484,318,15383,387
+  prompt    txt : The capital of France is
+  generated ids : 17374,20829,10,427,414,1008,606,142957
+  generated txt :  Paris.",~+            "The Eiffel~
+                  (~ marks a newline)
+
+  The first two tokens are 17374 = ' Paris' and 20829 = '.",' - the model answers the
+  question CORRECTLY. What follows ('+', indentation, '"The Eiffel') is the base model
+  continuing into what looks like a diff or a JSON context. There is no chat template
+  and no instruction tuning applied here, so a plain continuation is the expected
+  behaviour rather than a defect. See "What it does not do" in the README.
+
+--- the same answer holds across an 8x memory range ---
+7 arms, each under a hard cgroup cap.
+
+  cap    trunk  cache  s/token    token ids        decoded
+  96G    48G    40G    72.3430    17374,20829,10    Paris.",~+~
+  64G    32G    24G    67.8921    17374,20829,10    Paris.",~+~
+  48G    24G    16G    63.1822    17374,20829,10    Paris.",~+~
+  32G    12G    12G    63.4072    17374,20829,10    Paris.",~+~
+  24G    10G    7G     60.8162    17374,20829,10    Paris.",~+~
+  16G    6G     4G     68.4805    17374,20829,10    Paris.",~+~
+  12G    4G     2G     61.0702    17374,20829,10    Paris.",~+~
+
+  All 7 arms emit 17374,20829,10 - not merely the same ids at every budget, but the
+  same RIGHT answer from 96 GB down to 12 GB.
+
+  The O_DIRECT arm agrees: 17374,20829,10,427 at 64.89 s/token.
+
+  The s/token figures here are from an earlier, slower configuration than the ladder in
+  PERFORMANCE.md. The point of this table is the output column, not the timing column.
+
+--- an honest caveat about the logit-parity fixture ---
+
+The elementwise logit comparison against the reference (docs/TESTING.md, raw logs in
+tests/fixtures/golden/) used prompt ids 3,4,5,6,7, which decode to:
+
+  $%&'(
+
+That is synthetic junk, not text. The agreement it establishes is real and exact, and it
+is the strongest correctness evidence in the project - but it is agreement on one
+position of a meaningless prompt. It says nothing about output quality, and nothing here
+should be read as implying otherwise.
