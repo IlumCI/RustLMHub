@@ -1,0 +1,60 @@
+=== campaign host: full environment capture ===
+captured: 2026-07-31T08:30:37Z
+flavor : 4x L40 GPU instance (GPUs unused)
+
+--- uname ---
+Linux 6.14.0-37-generic #37~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 10:25:38 UTC 2 x86_64
+
+--- lscpu ---
+CPU(s):                                  124
+Model name:                              AMD EPYC 7763 64-Core Processor
+Thread(s) per core:                      1
+Core(s) per socket:                      62
+Socket(s):                               2
+L1d cache:                               7.8 MiB (124 instances)
+L2 cache:                                62 MiB (124 instances)
+L3 cache:                                1.9 GiB (124 instances)
+NUMA node(s):                            2
+NUMA node0 CPU(s):                       0-61
+NUMA node1 CPU(s):                       62-123
+
+--- ISA (note: AVX2 present, AVX-512 ABSENT) ---
+avx avx2 fma sse4_2
+
+--- memory ---
+               total        used        free      shared  buff/cache   available
+Mem:           228Gi       5.1Gi       207Gi       3.1Mi        18Gi       223Gi
+MemTotal:       239308464 kB
+MemAvailable:   233961008 kB
+Hugepagesize:       2048 kB
+
+--- storage ---
+/dev/vda1       3.2T  1.6T  1.6T  50% /
+NAME  SIZE ROTA MODEL
+vda   3.2T    1
+
+--- storage bandwidth, measured ---
+O_DIRECT cold : 3.2 GB/s     (dd bs=4M iflag=direct after drop_caches)
+buffered warm : 2.3 GB/s
+engine, trunk : 5373-6064 MB/s sustained during real runs
+NOTE O_DIRECT is FASTER than buffered here. That is the opposite of the usual
+     expectation, and it is why the engine opens the trunk O_DIRECT. Worth
+     re-checking on any target device before assuming it holds.
+
+--- os / toolchain ---
+PRETTY_NAME="Ubuntu 24.04.3 LTS"
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+GNU Make 4.3
+Python 3.12.3
+
+--- GPUs: PRESENT BUT UNUSED ---
+NVIDIA L40, 46068 MiB, 0 %
+NVIDIA L40, 46068 MiB, 0 %
+NVIDIA L40, 46068 MiB, 0 %
+NVIDIA L40, 49140 MiB, 0 %
+This engine is CPU-only. The 4 L40s sat idle for the entire campaign; the instance was chosen for its 228 GiB of RAM and 3.2 TB of NVMe, which are free on GPU flavors.
+
+--- measurement hygiene ---
+unattended-upgrades: STOPPED and DISABLED before measurement (was using ~63% of a
+  core during the smoke run, whose timing is therefore contaminated and not quoted).
+apt-daily.timer / apt-daily-upgrade.timer: disabled.
