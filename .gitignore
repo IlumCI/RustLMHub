@@ -1,0 +1,73 @@
+# build output.
+#
+# ANCHORED to the repository root, and it matters. The Makefile's $(BUILD) and
+# $(BIN) are `build` and `bin` at the root (Makefile:21-22), but an unanchored
+# `bin/` also matches Cargo's src/bin/ convention, which is where the Rust
+# port's binaries live. Unanchored, this rule silently dropped
+# rust/*/src/bin/*.rs from the tree: the workspace still declared the [[bin]]
+# targets, so a fresh clone would build and then fail on missing files.
+/build/
+/bin/
+*.o
+*.a
+*.so
+*.exe
+compile_commands.json
+
+# Rust port. Cargo.lock IS committed: the port's contract is byte-identical
+# output against the C build, and a floating dependency version is one more
+# way for that to drift silently.
+/rust/target/
+
+# Model weights and derived data. Hundreds of gigabytes; never commit these.
+# The patterns are broad on purpose; test fixtures are re-included at the bottom.
+*.safetensors
+trunk.bin
+trunk.json
+k3model/
+k3trunk/
+*.gguf
+
+# Run artifacts. Anchored to the repository root so that a stray `k3_run.json` in the
+# working directory is ignored while an identically-named fixture is not.
+/*.log
+/k3_run.json
+/expert_trace.bin
+/expert_hist.json
+/st_index.json
+/st_values.json
+/out/
+/results/
+
+# credentials
+hf_token*
+*.pem
+*_key
+*_key.pub
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~
+
+# ----------------------------------------------------------------------------------
+# Test fixtures are PART OF THE REPOSITORY and must survive every rule above.
+#
+# `make test` is this project's correctness gate, and it deliberately runs without model
+# weights, but only if the fixtures are present in the clone. Without these re-includes
+# the rules above silently drop tests/fixtures/{cache,st}/ (synthetic .safetensors
+# shards), expert_trace.bin, and the recorded reference logs. A fresh clone would then
+# build cleanly and fail its own test suite, which is a bad first impression and a
+# confusing one to debug.
+!tests/fixtures/
+!tests/fixtures/**
