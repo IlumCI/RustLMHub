@@ -1,0 +1,16 @@
+config: tests/fixtures/ref_k3.json (flat shape) | hidden=128 layers=13 vocab=256 | 4 MLA + 9 KDA | experts 8 top2 shared2 | latent=64
+  ok    hidden                       128
+  ok    layers                       13
+  ok    vocab                        256
+  ok    kda heads                    4
+  ok    kda head_dim                 16
+  ok    experts                      8
+  ok    topk                         2
+  ok    latent                       64
+  ok    attn_res_block               3
+  ok    situ b1                      4
+  ok    situ b2                      25
+  ok    full_attn count              4
+  ok    gate_lb (x-1)                5
+
+FIXTURE CONFIG: PASS
