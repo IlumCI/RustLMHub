@@ -1,0 +1,35 @@
+{
+  "_why": "Frozen reference outputs from the C engine, captured 2026-08-12 before the non-Rust tree was deleted. These ARE the oracle: rust-golden used to assert byte-identity against a C binary, and once that binary is gone the only way to keep the contract is to have written its answers down first.",
+  "prompt_ids": [
+    3,
+    7,
+    11,
+    5,
+    9
+  ],
+  "gen": 8,
+  "cache_gb": 0.5,
+  "full_ids": [
+    3,
+    7,
+    11,
+    5,
+    9,
+    92,
+    168,
+    13,
+    3,
+    49,
+    208,
+    214,
+    208
+  ],
+  "trunk_budgets_gb": [
+    0.0005,
+    0.001,
+    0.002,
+    0.05
+  ],
+  "c_logits": "c_logits.bin (1024 B, f32 little-endian, the whole-stack logits for gen 1)",
+  "torch_reference": "tiny/ref_logits.json (independent torch implementation)"
+}
