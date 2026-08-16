@@ -1,0 +1,142 @@
+# One crate, one file per subsystem, mirroring the C tree 1:1.
+#
+# The port is graded by running each module against the C build's existing test
+# for the same module, so file-for-file correspondence is load-bearing rather
+# than cosmetic: src/ops.rs is src/core/k3_ops.c, src/st.rs is src/io/k3_st.c,
+# and a reviewer can diff them side by side. A crate per module bought nothing
+# at this size except nine manifests to keep in sync.
+
+[package]
+name = "k3"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.85"
+description = "Kimi K3 inference in portable Rust. No BLAS, no framework, no GPU."
+
+[lib]
+name = "k3"
+path = "src/lib.rs"
+
+[[bin]]
+name = "test_cfg"
+path = "src/bin/test_cfg.rs"
+
+[[bin]]
+name = "libm_parity"
+path = "src/bin/libm_parity.rs"
+
+[dependencies]
+# Replaces third_party/json.h (135 lines) and, more importantly, the
+# hand-rolled streaming scanner in k3_st.c: str_, i64_, skip_value and
+# scan_shard are ~308 lines that exist because C has no JSON parser and no
+# hash map. Note the deliberate NON-dependency on the `safetensors` crate --
+# it wants the file as a slice or an mmap, and k3_st.h:22 refuses mmap on
+# purpose, because at 1.56 TB it would make the peak-RSS figure meaningless.
+# preserve_order keeps header keys in file order, so `tensors` is in discovery
+# order exactly as the C scanner produced it. Without it serde_json sorts, and
+# the index dump would no longer line up with the C one entry for entry.
+serde_json = { version = "1", features = ["preserve_order"] }
+tokenizers = { version = "0.23.1", default-features = false, features = ["onig"] }
+# Terminal UI for the training/eval workbench (bin/rustlm_tui). Both already in the local
+# cargo cache, so this resolves offline.
+ratatui = "0.29"
+crossterm = "0.28"
+
+# Replaces the seven `#pragma omp parallel for` regions -- six in src/core/k3_ops.c, one
+# in src/cache/k3_cache.c. The port parallelises over the SAME loop as the C, and only
+# over loops whose iterations write disjoint outputs and leave the inner accumulation
+# order untouched: k3_ops.c:417-421 makes exactly this argument for the router, and
+# :869-873 for the KDA head loop. Splitting such a loop cannot change a single bit, which
+# is why these need no tolerance and no re-gating -- and why every one of them is asserted
+# against its own serial path rather than assumed.
+rayon = "1.11"
+rustix = { version = "1", features = ["mm", "fs"] }
+tiny_http = "0.12"
+rage-quant = { version = "0.1.0", optional = true }
+cubecl = { version = "0.10.0", optional = true }
+io-uring = { version = "0.7.14", optional = true, package = "io-uring" }
+# `pycompat` is not optional in practice: chat templates ship as PYTHON Jinja2 and use
+# Python string methods. Qwen3.6's calls `.startswith()`, and without the shim the template
+# fails to render at all -- which is at least loud, but it would have meant no Qwen chat.
+# `json` provides the `tojson` filter, which every tool-calling chat template uses to
+# serialise the tool list. `loop_controls` provides break/continue. Both are load-bearing:
+# without them a real template fails to render and no chat is possible at all.
+minijinja = { version = "2.23.0", features = ["loop_controls", "json"] }
+minijinja-contrib = { version = "2.23.0", features = ["pycompat"] }
+
+# The C build sets -O3 -march=native -ffp-contract=off. Rust needs no
+# fp-contract flag: it never contracts a*b+c into an FMA implicitly, which is
+# the property the bit-exactness contract depends on. See docs/RUST_PORT.md.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+# Optional accelerator experiments. OFF by default and behind features on purpose: the
+# default dependency set is small enough to audit tensor by tensor, and every crate here is
+# an experiment whose value is unproven ON THIS MACHINE. Turning one on is a deliberate act,
+# and none of them may weaken the bit-exactness gates.
+#
+#   rage    quantised GEMV straight off GGML Q4_K/Q6_K blocks with AVX2+FMA. The closest
+#           prior art to our own kernels -- it makes the same "never dequantise to f32"
+#           argument. NOT a drop-in: our kernels are bit-exact against the C engine by
+#           construction and this one makes no such promise, so it could only be adopted
+#           behind the same golden test that guards everything else.
+#   (huge pages need no feature: membase 0.2.1 does not compile -- it is missing a
+#    `use std::fs::File;` in its own source -- and rustix, already a dependency, exposes
+#    MapFlags::HUGETLB directly. See accel::Arena.)
+#   uring   io_uring for expert reads. cache.rs already names the problem this solves: "a
+#           drive needs queue depth to reach its rated bandwidth, and one-at-a-time admit()
+#           gives it depth one." This is the tokio-rs `io-uring` crate, NOT glommio:
+#           glommio 0.9 vendors a liburing too old for current kernel headers and fails to
+#           compile ('struct open_how' incomplete). io-uring binds the syscalls directly
+#           with no C build, which is all the expert reader needs anyway.
+#   gpu     one kernel source compiled to CUDA/ROCm/WGSL. Today the GPU only stores bytes;
+#           this is what would let it do arithmetic. Alpha, and its API is still moving.
+[features]
+default = []
+rage = ["dep:rage-quant"]
+uring = ["dep:io-uring"]
+gpu = ["dep:cubecl"]
+
+[[bin]]
+name = "rustlm_tui"
+path = "src/bin/rustlm_tui.rs"
+
+[[bin]]
+name = "test_st"
+path = "src/bin/test_st.rs"
+
+[[bin]]
+name = "v4_expert"
+path = "src/bin/v4_expert.rs"
+
+[[bin]]
+name = "v4_attn"
+path = "src/bin/v4_attn.rs"
+
+[[bin]]
+name = "v4_compress"
+path = "src/bin/v4_compress.rs"
+
+[[bin]]
+name = "v4_run"
+path = "src/bin/v4_run.rs"
+
+[[bin]]
+name = "v4_cache"
+path = "src/bin/v4_cache.rs"
+
+[[bin]]
+name = "k3_run"
+path = "src/bin/k3_run.rs"
+
+[[bin]]
+name = "run"
+path = "src/bin/run.rs"
