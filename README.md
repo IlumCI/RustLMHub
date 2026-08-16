@@ -263,6 +263,7 @@ Environment switches include `RUSTLM_INT8` (int8 path), `RUSTLM_MEM_MARGIN_GB` (
 
 The engine is original code, but it stands on published ideas. The diagrams above are my own schematics of the pipeline. The work it draws from:
 
+* The origin, and the single biggest inspiration. FareedKhan-dev's kimi-k3-in-c (https://github.com/FareedKhan-dev/kimi-k3-in-c), a from-scratch C implementation of Kimi K3. This project started from that work and grew into the streaming Rust engine documented here. Without it there is no this.
 * Speculative decoding. Leviathan et al., "Fast Inference from Transformers via Speculative Decoding," arXiv:2211.17192. The multi-token-prediction and self-drafting formulation follows DeepSeek-V3 (arXiv:2412.19437) and EAGLE (arXiv:2401.15077).
 * Activation sparsity. "CATS: Contextually-Aware Thresholding for Sparsity in LLMs," arXiv:2404.08763. "Sparsing Law," arXiv:2411.02335. "TEAL: Training-Free Activation Sparsity in LLMs," arXiv:2408.14690. The figures in these papers show the activation-magnitude distributions that justify the certified skip.
 * Table-lookup matmul. "LUT-GEMM," arXiv:2206.09557. "T-MAC," arXiv:2407.00088.
