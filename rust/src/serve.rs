@@ -609,12 +609,16 @@ impl Ctx<'_> {
 
         let id = new_id("chatcmpl");
         eprintln!(
-            "[{id}] {} msg, {prompt_tokens} prompt tokens, max {} , temp {:.2}, seed {}",
+            "[{id}] chat model={} stream={} | {} msg, {prompt_tokens} prompt tokens, max {}, temp {:.2}, seed {}",
+            self.model_name,
+            r.stream,
             r.messages.len(),
             r.max_tokens,
             r.sample.as_ref().map(|s| s.temperature).unwrap_or(0.0),
             r.seed
         );
+        let t_gen = std::time::Instant::now();
+        let mut first_at: Option<std::time::Instant> = None;
 
         let mut scan = StopScan::new(r.stops.clone());
         let mut n_out = 0usize;
@@ -632,11 +636,14 @@ impl Ctx<'_> {
             );
             let mut dead = false;
             {
-                let (w, scan, full, n_out, finish, dead) =
-                    (&mut w, &mut scan, &mut full, &mut n_out, &mut finish, &mut dead);
+                let (w, scan, full, n_out, finish, dead, first_at) =
+                    (&mut w, &mut scan, &mut full, &mut n_out, &mut finish, &mut dead, &mut first_at);
                 let model_name = self.model_name.clone();
                 let id2 = id.clone();
                 let mut sink = |_tid: u32, piece: &str| -> bool {
+                    if first_at.is_none() {
+                        *first_at = Some(std::time::Instant::now());
+                    }
                     *n_out += 1;
                     let (out, hit) = scan.push(piece);
                     if !out.is_empty() {
@@ -698,13 +705,17 @@ impl Ctx<'_> {
             let _ = sse_frame(w.as_mut(), &chunk(&id, &self.model_name, json!({}), Some(finish)));
             let _ = w.write_all(b"data: [DONE]\n\n");
             let _ = w.flush();
-            eprintln!("[{id}] {n_out} tokens, finish {finish}");
+            log_timing(&id, prompt_tokens, n_out, finish, t_gen, first_at);
             return;
         }
 
         {
-            let (scan, full, n_out, finish) = (&mut scan, &mut full, &mut n_out, &mut finish);
+            let (scan, full, n_out, finish, first_at) =
+                (&mut scan, &mut full, &mut n_out, &mut finish, &mut first_at);
             let mut sink = |_tid: u32, piece: &str| -> bool {
+                if first_at.is_none() {
+                    *first_at = Some(std::time::Instant::now());
+                }
                 *n_out += 1;
                 let (out, hit) = scan.push(piece);
                 full.push_str(&out);
@@ -729,7 +740,7 @@ impl Ctx<'_> {
             finish = "tool_calls";
             msg["tool_calls"] = Value::Array(calls);
         }
-        eprintln!("[{id}] {n_out} tokens, finish {finish}");
+        log_timing(&id, prompt_tokens, n_out, finish, t_gen, first_at);
         let _ = req.respond(json_response(
             200,
             &json!({
@@ -749,6 +760,33 @@ impl Ctx<'_> {
             }),
         ));
     }
+}
+
+/// One Ollama-style summary line per completed request: prompt-eval count and rate, generation
+/// count and rate, and total wall time. `first_at` is when the first token arrived, which splits
+/// the prompt-eval (prefill) phase from generation; the first token is attributed to prefill, so
+/// the generation rate is measured over the remaining tokens.
+fn log_timing(
+    id: &str,
+    prompt_tokens: usize,
+    n_out: usize,
+    finish: &str,
+    t_gen: std::time::Instant,
+    first_at: Option<std::time::Instant>,
+) {
+    let now = std::time::Instant::now();
+    let total = now.duration_since(t_gen).as_secs_f64();
+    let (prefill_s, decode_s) = match first_at {
+        Some(f) => (f.duration_since(t_gen).as_secs_f64(), now.duration_since(f).as_secs_f64()),
+        None => (total, 0.0),
+    };
+    let prate = if prefill_s > 1e-6 { prompt_tokens as f64 / prefill_s } else { 0.0 };
+    let gen_tok = n_out.saturating_sub(1);
+    let drate = if decode_s > 1e-6 { gen_tok as f64 / decode_s } else { 0.0 };
+    eprintln!(
+        "[{id}] done finish={finish} | prompt {prompt_tokens} tok in {prefill_s:.2}s ({prate:.1} tok/s) | \
+         gen {n_out} tok in {decode_s:.2}s ({drate:.1} tok/s) | total {total:.2}s"
+    );
 }
 
 fn models_json(reg: &Registry, served: &str) -> Value {
@@ -906,6 +944,11 @@ pub fn run(cfg: &Cfg) -> Result<(), String> {
     for mut req in server.incoming_requests() {
         let url = req.url().split('?').next().unwrap_or("").to_string();
         let method = req.method().clone();
+        // Access log, one line per request, like Ollama's.
+        match req.remote_addr() {
+            Some(a) => eprintln!("{a} {method} {url}"),
+            None => eprintln!("- {method} {url}"),
+        }
         match (&method, url.as_str()) {
             (Method::Options, _) => {
                 let _ = req.respond(
