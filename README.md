@@ -254,6 +254,7 @@ Selected `serve` options:
 --max-tokens N      default generation cap per request
 --max-ctx N         rope table size / maximum context
 --no-int8           disable the int8 fast path (default is on, ~1.5x, near-bitwise)
+--descartes         disable the model's thinking (no <think> block; enable_thinking=false)
 --addr HOST:PORT    listen address
 ```
 

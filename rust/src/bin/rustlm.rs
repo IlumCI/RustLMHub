@@ -50,7 +50,8 @@ fn usage() -> ExitCode {
          --max-ctx N        rope table size, default 16384\n  \
          --conv-gb G        cached conversation state, default 2 (makes turn 2 cheap)\n  \
          --prefill-width N  prompt tokens per chunk, default 0 = derive from the cache\n  \
-         --no-int8          disable the int8 fast path (on by default; ~1.5x, near-bitwise)"
+         --no-int8          disable the int8 fast path (on by default; ~1.5x, near-bitwise)\n  \
+         --descartes        disable model thinking (no <think> block; enable_thinking=false)"
     );
     ExitCode::from(2)
 }
@@ -455,8 +456,13 @@ fn run(a: &[String]) -> Result<bool, String> {
                 max_ctx: num_flag(a, "--max-ctx", 16384usize)?,
                 conv_gb: num_flag(a, "--conv-gb", 2.0f64)?,
                 prefill_width: num_flag(a, "--prefill-width", 0usize)?,
+                // `--descartes`: serve with the model's thinking disabled ("I do not think").
+                descartes: a.iter().any(|x| x == "--descartes"),
                 params,
             };
+            if cfg.descartes {
+                println!("descartes: thinking disabled (enable_thinking=false in the chat template)");
+            }
             k3::serve::run(&cfg)?;
             Ok(true)
         }

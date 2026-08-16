@@ -55,6 +55,20 @@ impl Template {
         tools: &[Value],
         add_generation_prompt: bool,
     ) -> Result<String, String> {
+        self.render_ext(messages, tools, add_generation_prompt, true)
+    }
+
+    /// As [`Template::render`], but with explicit control over the template's `enable_thinking`
+    /// variable. Qwen3-family templates gate the `<think>` reasoning block on it, so passing
+    /// `false` suppresses the model's chain-of-thought. `render` leaves it on (the template
+    /// default).
+    pub fn render_ext(
+        &self,
+        messages: &[Value],
+        tools: &[Value],
+        add_generation_prompt: bool,
+        enable_thinking: bool,
+    ) -> Result<String, String> {
         let src = match self {
             Template::Plain => return Err("this model has no chat template".into()),
             Template::Jinja(s) => s.as_str(),
@@ -84,12 +98,14 @@ impl Template {
             t.render(context! {
                 messages => messages,
                 add_generation_prompt => add_generation_prompt,
+                enable_thinking => enable_thinking,
             })
         } else {
             t.render(context! {
                 messages => messages,
                 tools => tools,
                 add_generation_prompt => add_generation_prompt,
+                enable_thinking => enable_thinking,
             })
         };
         out.map_err(|e| {
@@ -214,6 +230,32 @@ mod tests {
         let msgs = normalise(&[json!({"role": "user",
             "content": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]})]);
         assert!(t.render(&msgs, &[], false).unwrap().contains("\nab<|im_end|>"));
+    }
+
+    /// `--descartes` sets `enable_thinking=false`, which a Qwen3 template must honour by
+    /// producing a DIFFERENT prompt than the thinking-on default. Runs against a real model
+    /// when `K3_MODEL` points at its directory (skips otherwise).
+    #[test]
+    fn descartes_changes_the_rendered_prompt() {
+        let Some(dir) = std::env::var_os("K3_MODEL") else {
+            return;
+        };
+        let st = crate::st::St::open(std::path::Path::new(&dir)).expect("open model");
+        let meta = st.meta.as_ref().expect("gguf meta");
+        let tmpl = Template::from_gguf(meta);
+        if !tmpl.is_jinja() {
+            return;
+        }
+        let msgs = normalise(&[json!({"role": "user", "content": "hi"})]);
+        let thinking_on = tmpl.render_ext(&msgs, &[], true, true).expect("render on");
+        let thinking_off = tmpl.render_ext(&msgs, &[], true, false).expect("render off");
+        assert_ne!(
+            thinking_on, thinking_off,
+            "enable_thinking=false must change the prompt on a thinking model"
+        );
+        let tail = |s: &str| s[s.len().saturating_sub(48)..].replace('\n', "\\n");
+        println!("thinking on  tail: ...{}", tail(&thinking_on));
+        println!("thinking off tail: ...{}", tail(&thinking_off));
     }
 
     /// A template that raises must produce an error carrying its message, not render

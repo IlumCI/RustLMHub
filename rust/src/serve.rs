@@ -64,6 +64,9 @@ pub struct Cfg {
     /// mostly compute -- so the best width is a property of the machine's cache hierarchy
     /// as much as of the model, and the only way to know it for a new one is to try.
     pub prefill_width: usize,
+    /// Disable the model's chain-of-thought (`--descartes`). Sets the chat template's
+    /// `enable_thinking` to false, so a reasoning model answers without a `<think>` block.
+    pub descartes: bool,
 }
 
 impl Default for Cfg {
@@ -75,6 +78,7 @@ impl Default for Cfg {
             params: Params::default(),
             conv_gb: 2.0,
             prefill_width: 0,
+            descartes: false,
         }
     }
 }
@@ -557,6 +561,8 @@ struct Ctx<'a> {
     model_name: String,
     /// Only `max_tokens` and `cache_gb` are read from here now; the rest is per-request.
     defaults: Params,
+    /// `--descartes`: render the prompt with thinking disabled.
+    descartes: bool,
 }
 
 impl Ctx<'_> {
@@ -574,7 +580,7 @@ impl Ctx<'_> {
         // on and stop strings that never fire.
         let prompt = if self.backend.template().is_jinja() {
             let msgs = crate::chat::normalise(&r.messages);
-            match self.backend.template().render(&msgs, &r.tools, true) {
+            match self.backend.template().render_ext(&msgs, &r.tools, true, !self.descartes) {
                 Ok(p) => p,
                 Err(e) => {
                     let _ = req.respond(api_error(400, &e, "invalid_request_error"));
@@ -895,7 +901,7 @@ pub fn run(cfg: &Cfg) -> Result<(), String> {
         cfg.addr
     );
 
-    let mut ctx = Ctx { backend, model_name, defaults: cfg.params.clone() };
+    let mut ctx = Ctx { backend, model_name, defaults: cfg.params.clone(), descartes: cfg.descartes };
 
     for mut req in server.incoming_requests() {
         let url = req.url().split('?').next().unwrap_or("").to_string();
