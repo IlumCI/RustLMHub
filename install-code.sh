@@ -110,8 +110,13 @@ fi
 [ -f "$BIN" ] || { echo "error: binary not found at $BIN. Run without --no-build, or build it first." >&2; exit 1; }
 
 # --- install ---
+# Install to a temp file in the same directory, then rename over the target. A plain overwrite
+# fails with "Text file busy" (ETXTBSY) when rustlm-code is currently running; an atomic rename
+# swaps the directory entry while the running process keeps its old inode.
 echo "installing rustlm-code to $BINDIR"
-$SUDO install -m 0755 "$BIN" "$BINDIR/rustlm-code"
+TMP="$BINDIR/.rustlm-code.new.$$"
+$SUDO install -m 0755 "$BIN" "$TMP"
+$SUDO mv -f "$TMP" "$BINDIR/rustlm-code"
 
 # --- PATH check ---
 case ":$PATH:" in
