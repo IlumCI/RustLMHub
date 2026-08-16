@@ -348,10 +348,10 @@ fn run(a: &[String]) -> Result<bool, String> {
                 Ok(st) => Ok(st.success()),
                 Err(e) => Err(format!(
                     "cannot run {}: {e}\n  \
-                     `rustlm code` runs the RustLM Code TUI, which is a separate binary. \
-                     Build it with `cargo build --release --no-default-features -p \
-                     rustlm-code` in the rustlm-code checkout, then put it on PATH or \
-                     beside this binary.",
+                     `rustlm code` needs the `rustlm-code` binary, a separate GPL-3.0 coding \
+                     agent. Install everything with one line:\n    \
+                     curl -fsSL https://raw.githubusercontent.com/IlumCI/RustLMHub/main/install-code.sh | sh -s -- --clone\n  \
+                     or run `./install-code.sh` from your RustLMHub checkout.",
                     prog.display()
                 )),
             }

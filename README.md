@@ -259,7 +259,13 @@ Selected `serve` options:
 
 Environment switches include `RUSTLM_INT8` (int8 path), `RUSTLM_MEM_MARGIN_GB` (how much RAM to leave free when auto-sizing the arena), and `Q35_CERT` (certified-sparsity budget).
 
-`rustlm code` dispatches to a separate binary called `rustlm-code`, the way `git` dispatches to `git-*`. That binary is a standalone terminal coding agent, licensed **GPL-3.0**, forked from claurst (`kuberwastaken/claurst`), and it lives in its own repository: https://github.com/IlumCI/rustlm-code. It is not part of this engine and is not covered by this repository's license. Build it from that repo (`cargo build --release --no-default-features -p rustlm-code`) and put the resulting `rustlm-code` binary on your PATH or beside `rustlm`.
+`rustlm code` dispatches to a separate binary called `rustlm-code`, the way `git` dispatches to `git-*`. That binary is a standalone terminal coding agent, licensed **GPL-3.0**, forked from claurst (`kuberwastaken/claurst`), and it lives in its own repository: https://github.com/IlumCI/rustlm-code. It is not part of this engine and is not covered by this repository's license. Install it with the companion script, which builds it and drops the binary next to `rustlm`:
+
+```sh
+./install-code.sh              # from this checkout (uses the local rustlm-code source if present)
+# or, one line, from anywhere:
+curl -fsSL https://raw.githubusercontent.com/IlumCI/RustLMHub/main/install-code.sh | sh -s -- --clone
+```
 
 ## 13. References and inspirations
 
