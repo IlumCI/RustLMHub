@@ -1,0 +1,103 @@
+RustLMHub Proprietary Non-Commercial License
+Copyright (c) Arron Leilion (Aronas Leilionas). All rights reserved.
+
+This software and all associated files, documentation, weights conversion
+tooling, and materials in this repository (the "Software") are the property of
+Arron Leilion (Aronas Leilionas) (the "Author"). This is a proprietary license.
+It is not an open-source license and grants no open-source rights.
+
+1. DEFINITIONS
+
+1.1 "Commercial Use" means any use by or for a for-profit entity, or any use
+    that is intended for or that results in commercial advantage, monetary
+    compensation, cost reduction for a business or organization, or revenue.
+    This includes the internal business operations of any company, and using
+    the Software to reduce a company's inference, training, or infrastructure
+    costs.
+
+1.2 "Personal Use" means use by an individual natural person for private,
+    non-commercial purposes such as learning, experimentation, and personal
+    projects that are not operated for profit.
+
+1.3 "Public Use" means use in publicly accessible, non-commercial contexts,
+    including open academic research, education, non-profit activity, and
+    publicly visible personal projects, provided such use is not Commercial
+    Use.
+
+1.4 "Private Use" means non-public use by or within a business or organization
+    for its own benefit. Private Use is not permitted under this license.
+
+2. GRANT OF LICENSE
+
+Subject to full compliance with this license, the Author grants you a limited,
+revocable, non-exclusive, non-transferable, non-sublicensable license to
+download, run, and use the Software solely for Personal Use or Public Use, and
+solely on a strictly non-commercial basis. You must keep this license file and
+all copyright and attribution notices intact in all copies.
+
+3. RESTRICTIONS
+
+You may not, and may not permit any third party to:
+
+3.1 Make any Commercial Use of the Software, in whole or in part.
+
+3.2 Make any Private Use of the Software by or within a business or
+    organization.
+
+3.3 Distribute, resell, rent, lease, host for others, offer as a service,
+    sublicense, or bundle the Software or any part of it for commercial purpose
+    or commercial benefit.
+
+3.4 Use the Software, in whole or in part, to provide a paid service, or a
+    service that reduces costs for any business or organization.
+
+3.5 Modify, adapt, translate, reverse engineer into a derivative, or create
+    derivative works of the Software, EXCEPT that you may submit proposed
+    changes as a pull request or issue to the official repository. By
+    submitting a contribution you grant the Author a perpetual, worldwide,
+    royalty-free, irrevocable license to use, reproduce, modify, and
+    incorporate that contribution into the Software under this same license,
+    and you represent that you have the right to do so.
+
+3.6 Remove, obscure, or alter any copyright, attribution, or license notice.
+
+All rights not expressly granted in Section 2 are reserved by the Author.
+
+4. COMMERCIAL LICENSING
+
+No Commercial Use or Private Use right is granted by this license under any
+circumstances. To obtain a commercial license you must contact and obtain
+written permission from the Author, and pay any fee the Author sets. Contact:
+a.leilion@euroswarms.eu.
+
+5. ENFORCEMENT
+
+Any use outside the grant in Section 2 is infringement. The Author intends to
+enforce this license to the fullest extent permitted by law, and to make
+commercial infringement in particular expensive for the infringer. Remedies
+the Author may seek include, without limitation: injunctive and equitable
+relief, actual and statutory damages, an accounting for and disgorgement of any
+profits earned or costs saved through infringement, and recovery of attorneys'
+fees and costs. The Author reserves the right to demand a reasonable audit and
+accounting from any party reasonably suspected of Commercial Use or Private
+Use. Lack of awareness of this license is not a defense.
+
+6. TERMINATION
+
+This license terminates automatically and immediately upon any breach. Upon
+termination you must cease all use and destroy all copies of the Software in
+your possession or control. Sections 3, 4, 5, 7, and 8 survive termination.
+
+7. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+8. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For permissions and commercial licensing: Arron Leilion, a.leilion@euroswarms.eu
