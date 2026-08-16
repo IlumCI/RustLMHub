@@ -14,6 +14,9 @@
 *.exe
 compile_commands.json
 
+# Claude Code working directory. Never belongs in the repository.
+.claude/
+
 # Rust port. Cargo.lock IS committed: the port's contract is byte-identical
 # output against the C build, and a floating dependency version is one more
 # way for that to drift silently.
