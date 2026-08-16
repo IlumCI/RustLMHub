@@ -242,7 +242,7 @@ rustlm list               list registered models and whether each can run
 rustlm serve NAME [opts]  OpenAI-compatible server (default 127.0.0.1:11434)
 rustlm run   NAME         interactive chat against a running server
 rustlm train              training and evaluation workbench (TUI)
-rustlm code               coding-agent front end
+rustlm code               launch the rustlm-code terminal coding agent (separate binary)
 rustlm probe NAME         inspect a model's geometry and IO tensors
 rustlm accel              report which accelerators this build and machine support
 ```
@@ -258,6 +258,8 @@ Selected `serve` options:
 ```
 
 Environment switches include `RUSTLM_INT8` (int8 path), `RUSTLM_MEM_MARGIN_GB` (how much RAM to leave free when auto-sizing the arena), and `Q35_CERT` (certified-sparsity budget).
+
+`rustlm code` dispatches to a separate binary called `rustlm-code`, the way `git` dispatches to `git-*`. That binary is a standalone terminal coding agent, licensed **GPL-3.0**, forked from claurst (`kuberwastaken/claurst`), and it lives in its own repository: https://github.com/IlumCI/rustlm-code. It is not part of this engine and is not covered by this repository's license. Build it from that repo (`cargo build --release --no-default-features -p rustlm-code`) and put the resulting `rustlm-code` binary on your PATH or beside `rustlm`.
 
 ## 13. References and inspirations
 
