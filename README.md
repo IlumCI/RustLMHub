@@ -4,7 +4,7 @@
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS-blue)
 ![Backend](https://img.shields.io/badge/backend-CPU%20streaming-lightgrey)
 ![Tests](https://img.shields.io/badge/tests-267%20passing-brightgreen)
-![Runs](https://img.shields.io/badge/runs-27B%20on%2016GB%20RAM-success)
+![Runs](https://img.shields.io/badge/runs-1.4T%20on%2016GB%20RAM-success)
 ![Inference deps](https://img.shields.io/badge/external%20inference%20runtimes-0-critical)
 ![License](https://img.shields.io/badge/license-Non--Commercial%20(see%20LICENSE)-red)
 
