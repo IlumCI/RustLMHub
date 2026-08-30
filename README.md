@@ -4,27 +4,21 @@
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS-blue)
 ![Backend](https://img.shields.io/badge/backend-CPU%20streaming-lightgrey)
 ![Tests](https://img.shields.io/badge/tests-267%20passing-brightgreen)
-![Runs](https://img.shields.io/badge/runs-1.4T%20on%2016GB%20RAM-success)
+![Runs](https://img.shields.io/badge/runs-2.78T%20params%20in%208GB%20RAM-success)
 ![Inference deps](https://img.shields.io/badge/external%20inference%20runtimes-0-critical)
 ![License](https://img.shields.io/badge/license-Non--Commercial%20(see%20LICENSE)-red)
 
-[![Hire me](https://img.shields.io/badge/hiring-Researcher%20%2F%20Rust%20Engineer%20(AI%2FML)-blueviolet)](docs/Arron_Leilion_Resume.pdf)
-[![Email](https://img.shields.io/badge/email-a.leilion%40euroswarms.eu-informational)](mailto:a.leilion@euroswarms.eu)
-[![GitHub](https://img.shields.io/badge/GitHub-IlumCI-black)](https://github.com/IlumCI)
-
-> Written by **Arron Leilion**. I built this, and I am open to a Researcher or Rust Engineer role in AI/ML. My resume is in this repo: [docs/Arron_Leilion_Resume.pdf](docs/Arron_Leilion_Resume.pdf). Contact: a.leilion@euroswarms.eu, GitHub [@IlumCI](https://github.com/IlumCI), site [euroswarms.eu](https://Euroswarms.eu/). More at the [bottom](#about-the-author).
+Written by Arron Leilion ([about the author](#about-the-author)).
 
 A from-scratch inference and training engine, written in Rust, that streams model weights off your disk so you can run models that are far larger than your RAM. It runs a dense 27B model on a 16GB laptop by reading the weights straight off an NVMe drive during the forward pass. Every kernel is hand written and verified bit-for-bit against a reference implementation. There is no PyTorch, no llama.cpp, no CUDA requirement, and no external inference runtime linked in. The engine computes everything itself.
 
 ## Why this exists
 
-I am greedy. I did the arithmetic on an AI subscription, landed on about $108 a month to rent someone else's GPUs by the token, and decided I would rather point that money at hardware I already own and keep the stack forever. The rule I set myself is simple: if a model fits on my hard drive, I want to run it. Not "load it into RAM." Fit it on the drive. That is the only limit I am willing to accept.
+I did the arithmetic on an AI subscription, landed on about $108 a month to rent someone else's GPUs by the token, and decided I would rather point that money at hardware I already own. The rule I set myself is that if a model fits on my hard drive, I want to run it. Fitting on the drive is the only limit I am willing to accept, and fitting in RAM is not one.
 
-So this is the thing that makes that rule true. It treats the SSD as the top of the memory hierarchy and streams weights through a small resident cache during decode. RAM stops being the wall. The wall becomes disk capacity, which is cheap.
+This is the thing that makes that rule true. It treats the SSD as the top of the memory hierarchy and streams weights through a small resident cache during decode. The ceiling on model size becomes disk capacity, which is cheap. The measured end of that argument is in [docs/PERFORMANCE.md](docs/PERFORMANCE.md): a 2.78T-parameter checkpoint, 1.56 TB on disk, decoding at a measured peak RSS of 8.24 GB, with output byte-identical to the same model given 224 GB.
 
-The uncomfortable implication, and I am going to say it out loud: once you can run essentially any open model in existence on hardware you already paid for, bounded only by whether it fits on your drive, the entire business of renting inference by the token starts to look like a tax you volunteered for. A few API resellers and a couple of "we are just a wrapper" startups are not going to enjoy reading this. That is not a bug in the project. That is the point of the project.
-
-And to be clear about scope: this is not only an inference engine. It targets training and research on the same streamed weights. You can fine tune a 27B model on the same 16GB laptop, because the frozen weights stream during the backward pass exactly as they do during the forward pass, and only the small adapter and its optimizer state stay resident.
+To be clear about scope: this is not only an inference engine. It targets training and research on the same streamed weights. You can fine tune a 27B model on the same 16GB laptop, because the frozen weights stream during the backward pass exactly as they do during the forward pass, and only the small adapter and its optimizer state stay resident.
 
 ## Quick start
 
@@ -227,7 +221,7 @@ Training and evaluation live behind a workbench, launched with `rustlm train`. I
 
 ## 10. Correctness discipline
 
-A wrong implementation of a language model still produces fluent, confident, wrong text. There is no crash to tell you. So the entire project is built around differential testing: the Rust output is asserted byte-identical to a reference decode of the same model, on committed fixtures, and any change that alters a kernel is gated behind that diff. Assertions are written to have teeth, meaning a deliberately mutated scale or a swapped stride is checked to make the test fail. There are 267 tests. The loader treats an unexpected tensor name or dtype as an error rather than decoding adjacent bytes into plausible garbage.
+A wrong implementation of a language model still produces fluent, confident, wrong text. There is no crash to tell you. So the entire project is built around differential testing: the Rust output is asserted byte-identical to a reference decode of the same model, on committed fixtures, and any change that alters a kernel is gated behind that diff. Assertions are written to have teeth, meaning a deliberately mutated scale or a swapped stride is checked to make the test fail. There are 267 tests, and `make test` runs them in seconds without downloading a single weight, which is the cheapest way for a reader to check this repo rather than take it on trust. The GGUF k-quant kernels are held to the same standard against a foreign implementation: Q4_K, Q5_K and Q6_K are verified bit-identical against `gguf`, llama.cpp's own reference, on Qwen2.5-0.5B-Instruct, 290/290 tensors agreeing on dtype, shape, offset and length. The loader treats an unexpected tensor name or dtype as an error rather than decoding adjacent bytes into plausible garbage.
 
 ## 11. Supported models
 
@@ -282,17 +276,9 @@ The engine is original code, but it stands on published ideas. The diagrams abov
 
 ## 14. License
 
-Copyright and all rights reserved by Arron Leilion (Aronas Leilionas). This is a proprietary, non-commercial license. It is not open source. The full terms are in [LICENSE](LICENSE). The short version, which does not replace that file:
+Copyright and all rights reserved by Arron Leilion (Aronas Leilionas). This is a proprietary, non-commercial license, and it is not open source. The terms are in [LICENSE](LICENSE), which is the file that governs. In summary: personal use and public non-commercial use such as research, education and non-profit work are permitted; commercial use of any kind is not, including internal use by a business, and including use that reduces a business's costs. Contributions are welcome as pull requests or issues, and submitting them licenses them to me under these same terms.
 
-Definitions. "Commercial Use" means any use by or for a for-profit entity, or any use that is intended for or that results in commercial advantage, monetary compensation, cost reduction for a business, or revenue, including internal business operations of any company. "Personal Use" means use by an individual natural person for private, non-commercial purposes. "Public Use" means use in publicly accessible, non-commercial contexts such as open research, education, non-profit work, and publicly visible personal projects. "Private Use" for the purposes of this license means non-public use by or within a business or organization for its own benefit, and it is not permitted.
-
-Grant. I grant a limited, revocable, non-exclusive, non-transferable license to run and use this software solely for Personal Use or Public Use, and solely on a strictly non-commercial basis, provided you keep this license and all notices intact.
-
-Restrictions. No Commercial Use of any kind. No Private Use by or within a business or organization. No commercial distribution, resale, hosting-for-others, sublicensing, or bundling. No use of this software, in whole or in part, to provide a paid or cost-saving service to anyone. No modification, adaptation, reverse engineering into a derivative, or creation of derivative works, with one exception: you may submit changes as a pull request or issue to the official repository, and by submitting them you license those contributions to me for inclusion under this same license. All rights not expressly granted are reserved.
-
-Enforcement. If you are a company or an individual acting for a company and you use this to cut your inference or training bill, you are infringing, and I intend to make that expensive for you. Violations, and commercial violations in particular, will be pursued to the fullest extent permitted by law, including injunctive relief, actual and statutory damages, disgorgement of any profits or cost savings obtained, and recovery of legal fees and costs. I reserve the right to demand an audit and an accounting. Ignorance of this file is not a defense.
-
-Commercial license. If you want to use this commercially, you do not get to decide that for yourself. You come to me and you pay for it. Contact a.leilion@euroswarms.eu.
+If you want to use this commercially, contact a.leilion@euroswarms.eu and we will arrange a license.
 
 No warranty. This software is provided "as is", without warranty of any kind, express or implied. I am not liable for any damages arising from its use.
 
